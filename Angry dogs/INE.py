@@ -121,33 +121,6 @@ def parse_rgb_text(text):
         raise ValueError("Не найдено ни одного RGB-триплета.")
     return pixels
 
-def parse_numeric_grid(text):
-    """Парсит текст как таблицу чисел: каждая строка — ряд чисел, разделённых пробелами или запятыми.
-    Возвращает list[list[int]]; если строки имеют разную длину — бросает ValueError."""
-    rows = []
-    for i, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        if "," in line and not line.replace(',', '').replace('.', '').replace('-', '').replace(' ', '').isdigit():
-            parts = [p.strip() for p in line.split(",") if p.strip() != ""]
-        else:
-            parts = [p for p in line.split() if p != ""]
-        if not parts:
-            continue
-        try:
-            nums = [int(float(p)) for p in parts]
-        except Exception:
-            raise ValueError(f"Строка {i}: неверный формат числа: '{raw_line}'")
-        rows.append(nums)
-    if not rows:
-        raise ValueError("Не найдено ни одной числовой строки.")
-    widths = {len(r) for r in rows}
-    if len(widths) != 1:
-        raise ValueError(f"Непостоянная ширина строк: найдено разные количества колонок: {sorted(list(widths))}")
-    return rows
-
-
 def open_image_from_text():
     global image_data, current_width, current_height
     txt = text_widget.get("1.0", tk.END)
@@ -377,67 +350,6 @@ def create_random_line():
 
     messagebox.showinfo("Готово", "Случайная линия создана и вставлена в табло (ширина = 1). Окно с визуализацией открыто.")
 
-def create_zigzag_numbers():
-    """
-    Берёт табличку чисел (каждая строка — ряд чисел, разделённых пробелами или запятыми),
-    проверяет, что количество колонок в каждой строке одинаково, и формирует новую колонку,
-    выбирая для строки i элемент в колонке согласно зигзагообразному (ping-pong) обходу по ширине.
-    Результат (по одному числу на строку) вставляется в табло, и открывается визуализация.
-
-    Пример: для ширины 3 последовательность колонок: 0,1,2,1,0,1,2,...
-    """
-    txt = text_widget.get("1.0", tk.END)
-    try:
-        grid = parse_numeric_grid(txt)
-    except ValueError as e:
-        messagebox.showerror("Ошибка парсинга", str(e))
-        return
-
-    h = len(grid)
-    w = len(grid[0])
-    if w <= 0 or h <= 0:
-        messagebox.showerror("Ошибка", "Пустая таблица.")
-        return
-
-    cols = []
-    if w == 1:
-        cols = [0] * h
-    else:
-        period = 2 * (w - 1)
-        for i in range(h):
-            pos = i % period
-            col = pos if pos < w else period - pos
-            cols.append(col)
-
-    selected = [grid[i][cols[i]] for i in range(h)]
-
-    # Вставляем результат в табло — одна колонка
-    lines = [str(int(v)) for v in selected]
-    text_widget.config(state="normal")
-    text_widget.delete("1.0", tk.END)
-    text_widget.insert("1.0", "\n".join(lines))
-    width_var.set("1")
-
-    # Визуализация: создаём вертикальную колонку с повторением для ширины
-    try:
-        vals = np.clip(np.array(selected, dtype=np.int32), 0, 255).astype(np.uint8)
-    except Exception:
-        vals = np.array([0]*h, dtype=np.uint8)
-    display_w = min(200, max(10, int(w * 10)))
-    vis = np.tile(vals[:, None], (1, display_w))  # shape (h, display_w)
-    img = Image.fromarray(vis, mode='L')
-
-    win = tk.Toplevel(root)
-    win.title("Зигзаг — выбранные числа (увеличено)")
-    canvas = tk.Canvas(win, width=img.width, height=img.height)
-    canvas.pack()
-    photo = ImageTk.PhotoImage(img)
-    canvas.create_image(0, 0, anchor=tk.NW, image=photo)
-    canvas_img_refs.append(photo)
-
-    messagebox.showinfo("Готово", "Зигзаг-колонка создана и вставлена в табло (ширина = 1). Окно с визуализацией открыто.")
-
-
 def save_audio():
     """Берёт либо загруженное изображение, либо строит его из текста, генерирует звук и сохраняет mp3 на рабочем стол."""
     global image_data
@@ -538,7 +450,7 @@ def save_audio():
 
 root = tk.Tk()
 root.title("RGB редактор Tkinter — Sonification")
-root.geometry("980x760")
+root.geometry("980x720")
 
 top_frame = tk.Frame(root)
 top_frame.pack(fill=tk.X, padx=8, pady=6)
@@ -550,10 +462,6 @@ load_btn.pack(side=tk.LEFT, padx=(0,6))
 # Новая кнопка: создаём случайную линию
 random_line_btn = tk.Button(top_frame, text="Случайная линия", command=create_random_line)
 random_line_btn.pack(side=tk.LEFT, padx=(0,6))
-
-# Добавлена кнопка: зигзаг по числам
-zigzag_btn = tk.Button(top_frame, text="Зигзаг (по числам)", command=create_zigzag_numbers)
-zigzag_btn.pack(side=tk.LEFT, padx=(0,6))
 
 width_label = tk.Label(top_frame, text="Ширина (px):")
 width_label.pack(side=tk.LEFT)
@@ -589,7 +497,7 @@ text_widget.pack(fill=tk.BOTH, expand=True)
 
 setup_clipboard_bindings(text_widget)
 
-hint = tk.Label(root, text="Формат: по одному триплету на строку: R G B   (или R,G,B).\nЕсли вы работаете с простой таблицей чисел (каждая строка — ряд чисел), используйте кнопку 'Зигзаг (по числам)'.\nЕсли поле 'Ширина' пустое, пытаемся подобрать квадрат.\nДлительность по умолчанию — 60 секунд. Нажмите 'Сохранить аудио' для получения MP3 (или WAV — если нет pydub/ffmpeg).", anchor="w", justify=tk.LEFT, wraplength=940)
+hint = tk.Label(root, text="Формат: по одному триплету на строку: R G B   (или R,G,B).\nЕсли поле 'Ширина' пустое, пытаемся подобрать квадрат.\nДлительность по умолчанию — 60 секунд. Нажмите 'Сохранить аудио' для получения MP3 (или WAV — если нет pydub/ffmpeg).", anchor="w", justify=tk.LEFT, wraplength=940)
 hint.pack(fill=tk.X, padx=8, pady=(0,8))
 
 root.mainloop()
